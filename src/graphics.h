@@ -23,6 +23,7 @@ namespace veng
     void CreateInstance();
     void SetupDebugMessenger();
     void PickPhysicalDevice();
+    void CreateLogicalDeviceAndQueues();
 
     // Extensions
     static gsl::span<gsl::czstring> GetSuggestedInstanceExtension();
@@ -41,6 +42,7 @@ namespace veng
 
     VkInstance instance_ = nullptr;
     VkPhysicalDevice physical_device_ = nullptr;
+    VkDevice logical_device_ = nullptr;
     VkDebugUtilsMessengerEXT debug_messenger_ = nullptr;
     gsl::not_null<Window*> window_;
     bool validation_enabled_ = false;
