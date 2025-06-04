@@ -1,6 +1,41 @@
 #include <graphics.h>
 
-#include <iostream>
+#include <spdlog/spdlog.h>
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(
+    VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* ext, const VkAllocationCallbacks* allocator,
+    VkDebugUtilsMessengerEXT* debug_messenger)
+{
+  PFN_vkCreateDebugUtilsMessengerEXT function = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+      vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
+  if (function != nullptr)
+  {
+    spdlog::info("Succesfully created debug utils messenger at {}, file: {}", __LINE__, __FILE__);
+    return function(instance, ext, nullptr, debug_messenger);
+  }
+  else
+  {
+    spdlog::error("Could not create debug utils messenger at {}, file: {}", __LINE__, __FILE__);
+    return VK_ERROR_EXTENSION_NOT_PRESENT;
+  }
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(
+    VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger, const VkAllocationCallbacks* allocator)
+{
+  PFN_vkDestroyDebugUtilsMessengerEXT function = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+      vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
+
+  if (function != nullptr)
+  {
+    function(instance, debug_messenger, nullptr);
+    spdlog::info("Succesfully destroyed debug utils messenger at {}, file: {}", __LINE__, __FILE__);
+  }
+  else
+  {
+    spdlog::error("Could not destroyed debug utils messenger at {}, file: {}", __LINE__, __FILE__);
+  }
+}
 
 namespace veng
 {
@@ -8,13 +43,13 @@ namespace veng
       VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
       const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data)
   {
-    if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
-      std::cerr << "[VULKAN VALIDATION CALLBACK] | Validation ERROR: " << callback_data->pMessage << std::endl;
+      spdlog::warn("[VULKAN VALIDATION CALLBACK] | Validation Warning: {}", callback_data->pMessage);
     }
     else
     {
-      std::cout << "[VULKAN VALIDATION CALLBACK] | Validation message: " << callback_data->pMessage << std::endl;
+      spdlog::error("[VULKAN VALIDATION CALLBACK] | Validation Error: {}", callback_data->pMessage);
     }
 
     return VK_FALSE;
@@ -27,9 +62,8 @@ namespace veng
     // const void* pNext;
     // VkDebugUtilsMessengerCreateFlagsEXT flags;
     creation_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    creation_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-                                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
+    creation_info.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     creation_info.messageType =
         VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
     creation_info.pfnUserCallback = ValidationCallback;
@@ -51,6 +85,10 @@ namespace veng
   {
     if (instance_ != nullptr)
     {
+      if (debug_messenger_ != nullptr)
+      {
+        vkDestroyDebugUtilsMessengerEXT(instance_, debug_messenger_, nullptr);
+      }
       vkDestroyInstance(instance_, nullptr);
     }
   }
@@ -58,6 +96,7 @@ namespace veng
   void Graphics::IntializeVulkan()
   {
     CreateInstance();
+    SetupDebugMessenger();
   }
 
   void Graphics::CreateInstance()
@@ -105,6 +144,22 @@ namespace veng
     if (result != VK_SUCCESS)
     {
       std::exit(EXIT_FAILURE);
+    }
+  }
+
+  void Graphics::SetupDebugMessenger()
+  {
+    if (!validation_enabled_)
+    {
+      return;
+    }
+
+    VkDebugUtilsMessengerCreateInfoEXT info = GetCreateMessengerInfo();
+    VkResult result = vkCreateDebugUtilsMessengerEXT(instance_, &info, nullptr, &debug_messenger_);
+    if (result != VK_SUCCESS)
+    {
+      spdlog::error("Failed To create DebugMessenger, at line:{} for file:{}", __LINE__, __FILE__);
+      return;
     }
   }
 

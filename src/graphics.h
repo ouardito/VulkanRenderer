@@ -16,7 +16,8 @@ namespace veng
    private:
     void IntializeVulkan();
     void CreateInstance();
-    
+    void SetupDebugMessenger();
+
     static gsl::span<gsl::czstring> GetSuggestedInstanceExtension();
     std::vector<gsl::czstring> GetRequiredInstanceExtension();
     static std::vector<VkExtensionProperties> GetSupportedInstanceExtensions();
@@ -25,10 +26,8 @@ namespace veng
     static std::vector<VkLayerProperties> GetSupportedValidationLayers();
     static bool AreAllLayersSupported(gsl::span<gsl::czstring> layers);
 
-    
-    
-
     VkInstance instance_ = nullptr;
+    VkDebugUtilsMessengerEXT debug_messenger_ = nullptr;
     gsl::not_null<Window*> window_;
     bool validation_enabled_ = false;
   };
