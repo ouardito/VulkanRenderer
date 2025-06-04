@@ -1,9 +1,49 @@
 #include <graphics.h>
 
+#include <iostream>
+
 namespace veng
 {
+  static VKAPI_ATTR VkBool32 VKAPI_CALL ValidationCallback(
+      VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+      const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data)
+  {
+    if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    {
+      std::cerr << "[VULKAN VALIDATION CALLBACK] | Validation ERROR: " << callback_data->pMessage << std::endl;
+    }
+    else
+    {
+      std::cout << "[VULKAN VALIDATION CALLBACK] | Validation message: " << callback_data->pMessage << std::endl;
+    }
+
+    return VK_FALSE;
+  };
+
+  static VkDebugUtilsMessengerCreateInfoEXT GetCreateMessengerInfo()
+  {
+    VkDebugUtilsMessengerCreateInfoEXT creation_info = {};
+
+    // const void* pNext;
+    // VkDebugUtilsMessengerCreateFlagsEXT flags;
+    creation_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    creation_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
+    creation_info.messageType =
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+    creation_info.pfnUserCallback = ValidationCallback;
+    creation_info.pUserData = nullptr;
+
+    return creation_info;
+  };
+
   Graphics::Graphics(gsl::not_null<Window*> window) : window_(window)
   {
+#ifndef NDEBUG
+    validation_enabled_ = true;
+#endif  // !NDEBUG
+
     IntializeVulkan();
   }
 
@@ -22,11 +62,13 @@ namespace veng
 
   void Graphics::CreateInstance()
   {
-    gsl::span<gsl::czstring> suggested_extensions = GetSuggestedInstanceExtension();
-    if (!AreAllExtensionsSupported(suggested_extensions))
+    std::array<gsl::czstring, 1> validation_layers = {"VK_LAYER_KHRONOS_validation"};
+    if (!AreAllLayersSupported(validation_layers))
     {
-      std::exit(EXIT_FAILURE);
-    };
+      validation_enabled_ = false;
+    }
+
+    std::vector<gsl::czstring> required_extensions = GetRequiredInstanceExtension();
 
     VkApplicationInfo app_info = {};
 
@@ -41,14 +83,23 @@ namespace veng
     VkInstanceCreateInfo instance_create_info = {};
 
     instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instance_create_info.pNext = nullptr;
-    // instance_create_info.flags;
     instance_create_info.pApplicationInfo = &app_info;
-    instance_create_info.enabledLayerCount = 0;
-    // instance_create_info.ppEnabledLayerNames;
+    instance_create_info.enabledExtensionCount = required_extensions.size();
+    instance_create_info.ppEnabledExtensionNames = required_extensions.data();
+    // instance_create_info.flags = TODO;
+    auto messenger_creation_info = GetCreateMessengerInfo();
 
-    instance_create_info.enabledExtensionCount = suggested_extensions.size();
-    instance_create_info.ppEnabledExtensionNames = suggested_extensions.data();
+    if (validation_enabled_)
+    {
+      instance_create_info.pNext = &messenger_creation_info;
+      instance_create_info.enabledLayerCount = validation_layers.size();
+      instance_create_info.ppEnabledLayerNames = validation_layers.data();
+    }
+    else
+    {
+      instance_create_info.enabledLayerCount = 0;
+      instance_create_info.ppEnabledLayerNames = nullptr;
+    }
 
     VkResult result = vkCreateInstance(&instance_create_info, nullptr, &instance_);
     if (result != VK_SUCCESS)
@@ -57,10 +108,11 @@ namespace veng
     }
   }
 
-  /////////////
-  // HELPERS //
-  /////////////
+  /////////////////////
+  // PRIVATE METHODS //
+  /////////////////////
 
+  // Instance Extension
   gsl::span<gsl::czstring> Graphics::GetSuggestedInstanceExtension()
   {
     std::uint32_t glfw_extensions_count = 0;
@@ -69,8 +121,25 @@ namespace veng
 
     return {glfw_extensions, glfw_extensions_count};
   }
+  std::vector<gsl::czstring> Graphics::GetRequiredInstanceExtension()
+  {
+    gsl::span<gsl::czstring> suggested_extensions = GetSuggestedInstanceExtension();
+    std::vector<gsl::czstring> required_extensions(suggested_extensions.size());
+    std::copy(suggested_extensions.begin(), suggested_extensions.end(), required_extensions.begin());
 
-  std::vector<VkExtensionProperties> Graphics::GetSupportedExtensions()
+    if (validation_enabled_)
+    {
+      required_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+
+    if (!AreAllExtensionsSupported(required_extensions))
+    {
+      std::exit(EXIT_FAILURE);
+    }
+
+    return required_extensions;
+  }
+  std::vector<VkExtensionProperties> Graphics::GetSupportedInstanceExtensions()
   {
     std::uint32_t count;
     vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
@@ -87,21 +156,56 @@ namespace veng
     }
   }
 
+  // Functional Helpers - TO BE USED ONLY FOR AreAllExtensionsSupported() //
   bool ExtensionMatchesNames(gsl::czstring name, const VkExtensionProperties& property)
   {
     return veng::streq(property.extensionName, name);
   };
-
   bool IsExtensionSupported(gsl::span<VkExtensionProperties> extensions, gsl::czstring name)
   {
     return std::any_of(extensions.begin(), extensions.end(), std::bind_front(ExtensionMatchesNames, name));
   };
-
+  //////////////////////////////////////////////////////////////////////////
   bool Graphics::AreAllExtensionsSupported(gsl::span<gsl::czstring> extension)
   {
-    std::vector<VkExtensionProperties> supported_extensions = GetSupportedExtensions();
+    std::vector<VkExtensionProperties> supported_extensions = GetSupportedInstanceExtensions();
 
     return std::all_of(extension.begin(), extension.end(), std::bind_front(IsExtensionSupported, supported_extensions));
+  }
+
+  // Validation layers
+  std::vector<VkLayerProperties> Graphics::GetSupportedValidationLayers()
+  {
+    std::uint32_t count;
+    vkEnumerateInstanceLayerProperties(&count, nullptr);
+
+    if (count == 0)
+    {
+      return {};
+    }
+    else
+    {
+      std::vector<VkLayerProperties> properties(count);
+      vkEnumerateInstanceLayerProperties(&count, properties.data());
+      return properties;
+    }
+  }
+
+  // Functional Helpers - TO BE USED ONLY FOR AreAllLayersSupported() //
+  bool LayerMatchesNames(gsl::czstring name, const VkLayerProperties& property)
+  {
+    return veng::streq(property.layerName, name);
+  };
+  bool IsLayerSupported(gsl::span<VkLayerProperties> layers, gsl::czstring name)
+  {
+    return std::any_of(layers.begin(), layers.end(), std::bind_front(LayerMatchesNames, name));
+  };
+  //////////////////////////////////////////////////////////////////////////
+  bool Graphics::AreAllLayersSupported(gsl::span<gsl::czstring> layers)
+  {
+    std::vector<VkLayerProperties> supported_layers = GetSupportedValidationLayers();
+
+    return std::all_of(layers.begin(), layers.end(), std::bind_front(IsLayerSupported, supported_layers));
   }
 
 }  // namespace veng
