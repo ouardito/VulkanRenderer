@@ -21,3 +21,6 @@
 
 // User Defined
 #include <utilities.h>
+
+// MACROS
+#define NULL_STRUCT {}

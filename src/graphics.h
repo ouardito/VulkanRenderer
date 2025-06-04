@@ -35,6 +35,7 @@ namespace veng
     void CreateLogicalDeviceAndQueues();
     void CreateSurface();
     void CreateSwapChain();
+    void CreateImageViews();
 
     // Instance Extensions
     static gsl::span<gsl::czstring> GetSuggestedInstanceExtension();
@@ -42,7 +43,7 @@ namespace veng
     static std::vector<VkExtensionProperties> GetSupportedInstanceExtensions();
     static bool AreAllExtensionsSupported(gsl::span<gsl::czstring> extension);
 
-    // Layers
+    // Validation Layers
     static std::vector<VkLayerProperties> GetSupportedValidationLayers();
     static bool AreAllLayersSupported(gsl::span<gsl::czstring> layers);
 
@@ -65,16 +66,22 @@ namespace veng
     std::uint32_t ChooseSwapImageCount(const VkSurfaceCapabilitiesKHR& capabilities);
     SwapChainProperties GetSwapChainProperties(VkPhysicalDevice device);
 
+    // Private Members
     VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
-
     VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
+
     VkDevice logical_device_ = VK_NULL_HANDLE;
     VkQueue graphics_queue_ = VK_NULL_HANDLE;
     VkQueue presentation_queue_ = VK_NULL_HANDLE;
 
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+    VkSurfaceFormatKHR surface_format_ = NULL_STRUCT;
+    VkPresentModeKHR presentation_mode_ = NULL_STRUCT;
+    VkExtent2D extent_ = NULL_STRUCT;
     VkSwapchainKHR swap_chain_ = VK_NULL_HANDLE;
+    std::vector<VkImage> swap_chain_images_ = NULL_STRUCT;
+    std::vector<VkImageView> swap_chain_image_views_ = NULL_STRUCT;
 
     gsl::not_null<Window*> window_;
     bool validation_enabled_ = false;

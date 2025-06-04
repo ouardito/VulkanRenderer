@@ -59,7 +59,7 @@ namespace veng
 
   static VkDebugUtilsMessengerCreateInfoEXT GetCreateMessengerInfo()
   {
-    VkDebugUtilsMessengerCreateInfoEXT creation_info = {};
+    VkDebugUtilsMessengerCreateInfoEXT creation_info = NULL_STRUCT;
 
     // const void* pNext;
     // VkDebugUtilsMessengerCreateFlagsEXT flags;
@@ -82,7 +82,7 @@ namespace veng
 
     if (count == 0)
     {
-      return {};
+      return NULL_STRUCT;
     }
     else
     {
@@ -167,7 +167,7 @@ namespace veng
 
     if (count == 0)
     {
-      return {};
+      return NULL_STRUCT;
     }
     else
     {
@@ -206,7 +206,7 @@ namespace veng
 
     std::vector<gsl::czstring> required_extensions = GetRequiredInstanceExtension();
 
-    VkApplicationInfo app_info = {};
+    VkApplicationInfo app_info = NULL_STRUCT;
 
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pNext = nullptr;  // no extensions (custom)
@@ -216,7 +216,7 @@ namespace veng
     app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     app_info.apiVersion = VK_API_VERSION_1_4;
 
-    VkInstanceCreateInfo instance_create_info = {};
+    VkInstanceCreateInfo instance_create_info = NULL_STRUCT;
 
     instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance_create_info.pApplicationInfo = &app_info;
@@ -355,7 +355,7 @@ namespace veng
 
     if (device_count == 0)
     {
-      return {};
+      return NULL_STRUCT;
     }
     else
     {
@@ -382,7 +382,7 @@ namespace veng
     std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
     for (std::uint32_t uqf : unique_queue_families)
     {
-      VkDeviceQueueCreateInfo queue_info = {};
+      VkDeviceQueueCreateInfo queue_info = NULL_STRUCT;
       queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
       queue_info.queueFamilyIndex = uqf;
       queue_info.queueCount = 1;
@@ -390,8 +390,8 @@ namespace veng
       queue_create_infos.push_back(queue_info);
     }
 
-    VkPhysicalDeviceFeatures required_features = {};
-    VkDeviceCreateInfo device_info = {};
+    VkPhysicalDeviceFeatures required_features = NULL_STRUCT;
+    VkDeviceCreateInfo device_info = NULL_STRUCT;
     device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_info.queueCreateInfoCount = queue_create_infos.size();
     device_info.pQueueCreateInfos = queue_create_infos.data();
@@ -506,21 +506,21 @@ namespace veng
   {
     SwapChainProperties properties = GetSwapChainProperties(physical_device_);
 
-    VkSurfaceFormatKHR surface_format = ChooseSwapSurfaceFormat(properties.formats_);
-    VkPresentModeKHR presentation_mode = ChooseSwapPresentationMode(properties.presentaion_modes_);
-    VkExtent2D extent = ChooseSwapExtent(properties.capabilities_);
+    surface_format_ = ChooseSwapSurfaceFormat(properties.formats_);
+    presentation_mode_ = ChooseSwapPresentationMode(properties.presentaion_modes_);
+    extent_ = ChooseSwapExtent(properties.capabilities_);
     std::uint32_t image_count = ChooseSwapImageCount(properties.capabilities_);
 
-    VkSwapchainCreateInfoKHR info = {};
+    VkSwapchainCreateInfoKHR info = NULL_STRUCT;
     info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     info.surface = surface_;
     info.minImageCount = image_count;
-    info.imageFormat = surface_format.format;
-    info.imageColorSpace = surface_format.colorSpace;
-    info.imageExtent = extent;
+    info.imageFormat = surface_format_.format;
+    info.imageColorSpace = surface_format_.colorSpace;
+    info.imageExtent = extent_;
     info.imageArrayLayers = 1;
     info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    info.presentMode = presentation_mode;
+    info.presentMode = presentation_mode_;
     info.preTransform = properties.capabilities_.currentTransform;
     info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     info.clipped = VK_TRUE;
@@ -546,6 +546,42 @@ namespace veng
     {
       std::exit(EXIT_FAILURE);
     }
+
+    vkGetSwapchainImagesKHR(logical_device_, swap_chain_, &image_count, swap_chain_images_.data());
+  }
+
+  // Image views (aka Frames)
+  void Graphics::CreateImageViews()
+  {
+    swap_chain_image_views_.resize(swap_chain_images_.size());
+    auto it = swap_chain_image_views_.begin();
+    for (VkImage image : swap_chain_images_)
+    {
+      VkImageViewCreateInfo info = NULL_STRUCT;
+      info.sType = VkStructureType::VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+      info.image = image;
+      info.viewType = VkImageViewType::VK_IMAGE_VIEW_TYPE_2D;
+      info.format = surface_format_.format;
+
+      info.components.r = VkComponentSwizzle::VK_COMPONENT_SWIZZLE_IDENTITY;
+      info.components.g = VkComponentSwizzle::VK_COMPONENT_SWIZZLE_IDENTITY;
+      info.components.b = VkComponentSwizzle::VK_COMPONENT_SWIZZLE_IDENTITY;
+      info.components.a = VkComponentSwizzle::VK_COMPONENT_SWIZZLE_IDENTITY;
+
+      info.subresourceRange.aspectMask = VkImageAspectFlagBits::VK_IMAGE_ASPECT_COLOR_BIT;
+
+      info.subresourceRange.baseMipLevel = 0;
+      info.subresourceRange.levelCount = 1;
+      info.subresourceRange.baseArrayLayer = 0;
+      info.subresourceRange.layerCount = 1;
+
+      VkResult result = vkCreateImageView(logical_device_, &info, VK_NULL_HANDLE, &*it);
+      if (result != VK_SUCCESS)
+      {
+        std::exit(EXIT_FAILURE);
+      }
+      std::next(it);
+    }
   }
 #pragma endregion
 
@@ -562,6 +598,11 @@ namespace veng
   {
     if (logical_device_ != VK_NULL_HANDLE)
     {
+      for (VkImageView image : swap_chain_image_views_)
+      {
+        vkDestroyImageView(logical_device_, image, VK_NULL_HANDLE);
+      }
+
       if (swap_chain_ != VK_NULL_HANDLE)
       {
         vkDestroySwapchainKHR(logical_device_, swap_chain_, VK_NULL_HANDLE);
