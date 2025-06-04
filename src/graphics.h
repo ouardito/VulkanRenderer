@@ -16,7 +16,16 @@ namespace veng
     {
       std::optional<std::uint32_t> graphics_family_ = std::nullopt;
       std::optional<std::uint32_t> presentation_family_ = std::nullopt;
-      bool IsValid() const { return (graphics_family_.has_value() /* && presentation_family_.has_value()*/); };
+      bool IsValid() const { return (graphics_family_.has_value() && presentation_family_.has_value()); };
+    };
+
+    struct SwapChainProperties
+    {
+      VkSurfaceCapabilitiesKHR capabilities_;
+      std::vector<VkSurfaceFormatKHR> formats_;
+      std::vector<VkPresentModeKHR> presentaion_modes_;
+
+      bool IsValid() const { return (!formats_.empty() && !presentaion_modes_.empty()); };
     };
 
     void IntializeVulkan();
@@ -26,7 +35,7 @@ namespace veng
     void CreateLogicalDeviceAndQueues();
     void CreateSurface();
 
-    // Extensions
+    // Instance Extensions
     static gsl::span<gsl::czstring> GetSuggestedInstanceExtension();
     std::vector<gsl::czstring> GetRequiredInstanceExtension();
     static std::vector<VkExtensionProperties> GetSupportedInstanceExtensions();
@@ -36,10 +45,20 @@ namespace veng
     static std::vector<VkLayerProperties> GetSupportedValidationLayers();
     static bool AreAllLayersSupported(gsl::span<gsl::czstring> layers);
 
-    // Devices
-    QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
+    // Physical Devices 
     std::vector<VkPhysicalDevice> GetAvailableDevices();
     bool isDeviceSuitable(VkPhysicalDevice device);
+
+    // Physical Devices - Extensions
+    std::array<gsl::czstring, 1> required_device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    std::vector<VkExtensionProperties> GetDeviceAvailableExtensions(VkPhysicalDevice physicaldevice);
+    bool AreAllDeviceExtensionsSupported(VkPhysicalDevice device);
+
+    // Physical Devices - Queue
+    QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
+
+    // Physical Devices - SwapChain
+    SwapChainProperties GetSwapChainProperties(VkPhysicalDevice device);
 
     VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;

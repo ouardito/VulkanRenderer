@@ -251,7 +251,7 @@ namespace veng
   Graphics::QueueFamilyIndices Graphics::FindQueueFamilies(VkPhysicalDevice device)
   {
     std::uint32_t queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, VK_NULL_HANDLE);
     std::vector<VkQueueFamilyProperties> families(queue_family_count);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, families.data());
 
@@ -265,10 +265,11 @@ namespace veng
     QueueFamilyIndices QFI_result;
     QFI_result.graphics_family_ = graphics_family_it - families.begin();
 
+    // Loop through teh queue family properties
     for (std::uint32_t i = 0; i < families.size(); i++)
     {
       VkBool32 has_representation_support = false;
-      vkGetPhysicalDeviceSurfaceSupportKHR(physical_device_, i, surface_, &has_representation_support);
+      vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface_, &has_representation_support);
       if (has_representation_support)
       {
         QFI_result.presentation_family_ = i;
@@ -277,13 +278,59 @@ namespace veng
     }
 
     return QFI_result;
+  }
+  Graphics::SwapChainProperties Graphics::GetSwapChainProperties(VkPhysicalDevice device)
+  {
+    SwapChainProperties properties;
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface_, &properties.capabilities_);
+
+    std::uint32_t format_count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &format_count, VK_NULL_HANDLE);
+    properties.formats_.resize(format_count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &format_count, properties.formats_.data());
+
+    std::uint32_t presentation_modes_count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentation_modes_count, VK_NULL_HANDLE);
+    properties.presentaion_modes_.resize(presentation_modes_count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        device, surface_, &presentation_modes_count, properties.presentaion_modes_.data());
+
+    return properties;
   };
+
+  std::vector<VkExtensionProperties> Graphics::GetDeviceAvailableExtensions(VkPhysicalDevice physicaldevice)
+  {
+    std::uint32_t available_extensions_count = 0;
+    vkEnumerateDeviceExtensionProperties(physicaldevice, VK_NULL_HANDLE, &available_extensions_count, VK_NULL_HANDLE);
+    std::vector<VkExtensionProperties> available_extensions(available_extensions_count);
+    vkEnumerateDeviceExtensionProperties(
+        physicaldevice, VK_NULL_HANDLE, &available_extensions_count, available_extensions.data());
+
+    return available_extensions;
+  }
+  bool IsDeviceExtensionsWithinList(const std::vector<VkExtensionProperties>& extensions, gsl::czstring name)
+  {
+    return std::any_of(
+        extensions.begin(), extensions.end(),
+        [name](const VkExtensionProperties& props)
+        {
+          return veng::streq(props.extensionName, name);
+        });
+  }
+  bool Graphics::AreAllDeviceExtensionsSupported(VkPhysicalDevice device)
+  {
+    std::vector<VkExtensionProperties> available_device_extensions = GetDeviceAvailableExtensions(device);
+    return std::all_of(
+        required_device_extensions.begin(), required_device_extensions.end(),
+        std::bind_front(IsDeviceExtensionsWithinList, available_device_extensions));
+  }
 
   bool Graphics::isDeviceSuitable(VkPhysicalDevice device)
   {
     QueueFamilyIndices families = FindQueueFamilies(device);
 
-    return families.IsValid();  // TODO: Add criterias
+    return families.IsValid() && AreAllDeviceExtensionsSupported(device) && GetSwapChainProperties(device).IsValid();
   }
 
   void Graphics::PickPhysicalDevice()
@@ -349,7 +396,8 @@ namespace veng
     device_info.queueCreateInfoCount = queue_create_infos.size();
     device_info.pQueueCreateInfos = queue_create_infos.data();
     device_info.pEnabledFeatures = &required_features;
-    device_info.enabledExtensionCount = 0;
+    device_info.enabledExtensionCount = required_device_extensions.size();
+    device_info.ppEnabledExtensionNames = required_device_extensions.data();
     device_info.enabledLayerCount = 0;  // DEPRECATED
 
     VkResult result = vkCreateDevice(physical_device_, &device_info, nullptr, &logical_device_);
