@@ -1,7 +1,6 @@
 #include <graphics.h>
 
-#include <spdlog/spdlog.h>
-
+#pragma region VK_FUNC_EXT_IMPL
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(
     VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* ext, const VkAllocationCallbacks* allocator,
     VkDebugUtilsMessengerEXT* debug_messenger)
@@ -10,12 +9,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(
       vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
   if (function != nullptr)
   {
-    spdlog::info("Succesfully created debug utils messenger at {}, file: {}", __LINE__, __FILE__);
+    SPDLOG_INFO("Succesfully created debug utils messenger.");
     return function(instance, ext, nullptr, debug_messenger);
   }
   else
   {
-    spdlog::error("Could not create debug utils messenger at {}, file: {}", __LINE__, __FILE__);
+    SPDLOG_ERROR("Could not create debug utils messenger.");
     return VK_ERROR_EXTENSION_NOT_PRESENT;
   }
 }
@@ -29,27 +28,30 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(
   if (function != nullptr)
   {
     function(instance, debug_messenger, nullptr);
-    spdlog::info("Succesfully destroyed debug utils messenger at {}, file: {}", __LINE__, __FILE__);
+    SPDLOG_INFO("Succesfully destroyed debug utils messenger.");
   }
   else
   {
-    spdlog::error("Could not destroyed debug utils messenger at {}, file: {}", __LINE__, __FILE__);
+    SPDLOG_ERROR("Could not destroyed debug utils messenger");
   }
 }
+#pragma endregion
 
 namespace veng
 {
+
+#pragma region VALIDATION_LAYERS
   static VKAPI_ATTR VkBool32 VKAPI_CALL ValidationCallback(
       VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
       const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data)
   {
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
-      spdlog::warn("[VULKAN VALIDATION CALLBACK] | Validation Warning: {}", callback_data->pMessage);
+      SPDLOG_WARN("[VULKAN VALIDATION CALLBACK] | Validation Warning: {}", callback_data->pMessage);
     }
     else
     {
-      spdlog::error("[VULKAN VALIDATION CALLBACK] | Validation Error: {}", callback_data->pMessage);
+      SPDLOG_ERROR("[VULKAN VALIDATION CALLBACK] | Validation Error: {}", callback_data->pMessage);
     }
 
     return VK_FALSE;
@@ -72,31 +74,126 @@ namespace veng
     return creation_info;
   };
 
-  Graphics::Graphics(gsl::not_null<Window*> window) : window_(window)
+  // Validation layers
+  std::vector<VkLayerProperties> Graphics::GetSupportedValidationLayers()
   {
-#ifndef NDEBUG
-    validation_enabled_ = true;
-#endif  // !NDEBUG
+    std::uint32_t count;
+    vkEnumerateInstanceLayerProperties(&count, nullptr);
 
-    IntializeVulkan();
-  }
-
-  Graphics::~Graphics()
-  {
-    if (instance_ != nullptr)
+    if (count == 0)
     {
-      if (debug_messenger_ != nullptr)
-      {
-        vkDestroyDebugUtilsMessengerEXT(instance_, debug_messenger_, nullptr);
-      }
-      vkDestroyInstance(instance_, nullptr);
+      return {};
+    }
+    else
+    {
+      std::vector<VkLayerProperties> properties(count);
+      vkEnumerateInstanceLayerProperties(&count, properties.data());
+      return properties;
     }
   }
 
-  void Graphics::IntializeVulkan()
+  // Functional Helpers - TO BE USED ONLY FOR AreAllLayersSupported() //
+  bool LayerMatchesNames(gsl::czstring name, const VkLayerProperties& property)
   {
-    CreateInstance();
-    SetupDebugMessenger();
+    return veng::streq(property.layerName, name);
+  };
+
+  bool IsLayerSupported(gsl::span<VkLayerProperties> layers, gsl::czstring name)
+  {
+    return std::any_of(layers.begin(), layers.end(), std::bind_front(LayerMatchesNames, name));
+  };
+  //////////////////////////////////////////////////////////////////////////
+
+  bool Graphics::AreAllLayersSupported(gsl::span<gsl::czstring> layers)
+  {
+    std::vector<VkLayerProperties> supported_layers = GetSupportedValidationLayers();
+
+    return std::all_of(layers.begin(), layers.end(), std::bind_front(IsLayerSupported, supported_layers));
+  }
+
+  void Graphics::SetupDebugMessenger()
+  {
+    if (!validation_enabled_)
+    {
+      return;
+    }
+
+    VkDebugUtilsMessengerCreateInfoEXT info = GetCreateMessengerInfo();
+    VkResult result = vkCreateDebugUtilsMessengerEXT(instance_, &info, nullptr, &debug_messenger_);
+    if (result != VK_SUCCESS)
+    {
+      SPDLOG_ERROR("Failed To create DebugMessenger.");
+      return;
+    }
+  }
+
+#pragma endregion
+
+#pragma region INSTANCE_AND_EXTENSIONS
+
+  // Instance Extension
+  gsl::span<gsl::czstring> Graphics::GetSuggestedInstanceExtension()
+  {
+    std::uint32_t glfw_extensions_count = 0;
+    gsl::czstring* glfw_extensions;
+    glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extensions_count);
+
+    return {glfw_extensions, glfw_extensions_count};
+  }
+
+  std::vector<gsl::czstring> Graphics::GetRequiredInstanceExtension()
+  {
+    gsl::span<gsl::czstring> suggested_extensions = GetSuggestedInstanceExtension();
+    std::vector<gsl::czstring> required_extensions(suggested_extensions.size());
+    std::copy(suggested_extensions.begin(), suggested_extensions.end(), required_extensions.begin());
+
+    if (validation_enabled_)
+    {
+      required_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+
+    if (!AreAllExtensionsSupported(required_extensions))
+    {
+      std::exit(EXIT_FAILURE);
+    }
+
+    return required_extensions;
+  }
+
+  std::vector<VkExtensionProperties> Graphics::GetSupportedInstanceExtensions()
+  {
+    std::uint32_t count;
+    vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
+
+    if (count == 0)
+    {
+      return {};
+    }
+    else
+    {
+      std::vector<VkExtensionProperties> properties(count);
+      vkEnumerateInstanceExtensionProperties(nullptr, &count, properties.data());
+      return properties;
+    }
+  }
+
+  // Functional Helpers - TO BE USED ONLY FOR AreAllExtensionsSupported() //
+  bool ExtensionMatchesNames(gsl::czstring name, const VkExtensionProperties& property)
+  {
+    return veng::streq(property.extensionName, name);
+  };
+
+  bool IsExtensionSupported(gsl::span<VkExtensionProperties> extensions, gsl::czstring name)
+  {
+    return std::any_of(extensions.begin(), extensions.end(), std::bind_front(ExtensionMatchesNames, name));
+  };
+  //////////////////////////////////////////////////////////////////////////
+
+  bool Graphics::AreAllExtensionsSupported(gsl::span<gsl::czstring> extension)
+  {
+    std::vector<VkExtensionProperties> supported_extensions = GetSupportedInstanceExtensions();
+
+    return std::all_of(extension.begin(), extension.end(), std::bind_front(IsExtensionSupported, supported_extensions));
   }
 
   void Graphics::CreateInstance()
@@ -147,120 +244,86 @@ namespace veng
     }
   }
 
-  void Graphics::SetupDebugMessenger()
-  {
-    if (!validation_enabled_)
-    {
-      return;
-    }
+#pragma endregion
 
-    VkDebugUtilsMessengerCreateInfoEXT info = GetCreateMessengerInfo();
-    VkResult result = vkCreateDebugUtilsMessengerEXT(instance_, &info, nullptr, &debug_messenger_);
-    if (result != VK_SUCCESS)
-    {
-      spdlog::error("Failed To create DebugMessenger, at line:{} for file:{}", __LINE__, __FILE__);
-      return;
-    }
+#pragma region DEVICES_AND_QUEUES
+
+  bool Graphics::isDeviceSuitable(VkPhysicalDevice device)
+  {
+    VkPhysicalDeviceProperties device_properties;
+    vkGetPhysicalDeviceProperties(device, &device_properties);
+
+    VkPhysicalDeviceFeatures device_features;
+    vkGetPhysicalDeviceFeatures(device, &device_features);
+
+    return true;  // TODO: Add criterias
   }
 
-  /////////////////////
-  // PRIVATE METHODS //
-  /////////////////////
-
-  // Instance Extension
-  gsl::span<gsl::czstring> Graphics::GetSuggestedInstanceExtension()
+  void Graphics::PickPhysicalDevice()
   {
-    std::uint32_t glfw_extensions_count = 0;
-    gsl::czstring* glfw_extensions;
-    glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extensions_count);
+    std::vector<VkPhysicalDevice> devices = GetAvailableDevices();
 
-    return {glfw_extensions, glfw_extensions_count};
-  }
-  std::vector<gsl::czstring> Graphics::GetRequiredInstanceExtension()
-  {
-    gsl::span<gsl::czstring> suggested_extensions = GetSuggestedInstanceExtension();
-    std::vector<gsl::czstring> required_extensions(suggested_extensions.size());
-    std::copy(suggested_extensions.begin(), suggested_extensions.end(), required_extensions.begin());
+    std::erase_if(devices, std::not_fn(std::bind_front(&Graphics::isDeviceSuitable, this)));
 
-    if (validation_enabled_)
+    if (devices.empty())
     {
-      required_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-
-    if (!AreAllExtensionsSupported(required_extensions))
-    {
+      SPDLOG_ERROR("No physical devices found that match Device Criterias.");
       std::exit(EXIT_FAILURE);
     }
 
-    return required_extensions;
+    for (VkPhysicalDevice device : devices)
+    {
+      VkPhysicalDeviceProperties device_properties;
+      vkGetPhysicalDeviceProperties(device, &device_properties);
+      SPDLOG_INFO("Devices found:{}", device_properties.deviceName);
+    }
   }
-  std::vector<VkExtensionProperties> Graphics::GetSupportedInstanceExtensions()
-  {
-    std::uint32_t count;
-    vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
 
-    if (count == 0)
+  std::vector<VkPhysicalDevice> Graphics::GetAvailableDevices()
+  {
+    std::uint32_t device_count;
+    vkEnumeratePhysicalDevices(instance_, &device_count, nullptr);
+
+    if (device_count == 0)
     {
       return {};
     }
     else
     {
-      std::vector<VkExtensionProperties> properties(count);
-      vkEnumerateInstanceExtensionProperties(nullptr, &count, properties.data());
-      return properties;
+      std::vector<VkPhysicalDevice> devices(device_count);
+      vkEnumeratePhysicalDevices(instance_, &device_count, devices.data());
+
+      return devices;
     }
+  };
+#pragma endregion
+
+  Graphics::Graphics(gsl::not_null<Window*> window) : window_(window)
+  {
+#ifndef NDEBUG
+    validation_enabled_ = true;
+#endif  // !NDEBUG
+
+    IntializeVulkan();
   }
 
-  // Functional Helpers - TO BE USED ONLY FOR AreAllExtensionsSupported() //
-  bool ExtensionMatchesNames(gsl::czstring name, const VkExtensionProperties& property)
+  Graphics::~Graphics()
   {
-    return veng::streq(property.extensionName, name);
-  };
-  bool IsExtensionSupported(gsl::span<VkExtensionProperties> extensions, gsl::czstring name)
-  {
-    return std::any_of(extensions.begin(), extensions.end(), std::bind_front(ExtensionMatchesNames, name));
-  };
-  //////////////////////////////////////////////////////////////////////////
-  bool Graphics::AreAllExtensionsSupported(gsl::span<gsl::czstring> extension)
-  {
-    std::vector<VkExtensionProperties> supported_extensions = GetSupportedInstanceExtensions();
-
-    return std::all_of(extension.begin(), extension.end(), std::bind_front(IsExtensionSupported, supported_extensions));
-  }
-
-  // Validation layers
-  std::vector<VkLayerProperties> Graphics::GetSupportedValidationLayers()
-  {
-    std::uint32_t count;
-    vkEnumerateInstanceLayerProperties(&count, nullptr);
-
-    if (count == 0)
+    if (instance_ != nullptr)
     {
-      return {};
-    }
-    else
-    {
-      std::vector<VkLayerProperties> properties(count);
-      vkEnumerateInstanceLayerProperties(&count, properties.data());
-      return properties;
+      if (debug_messenger_ != nullptr)
+      {
+        vkDestroyDebugUtilsMessengerEXT(instance_, debug_messenger_, nullptr);
+      }
+      vkDestroyInstance(instance_, nullptr);
     }
   }
 
-  // Functional Helpers - TO BE USED ONLY FOR AreAllLayersSupported() //
-  bool LayerMatchesNames(gsl::czstring name, const VkLayerProperties& property)
+  void Graphics::IntializeVulkan()
   {
-    return veng::streq(property.layerName, name);
-  };
-  bool IsLayerSupported(gsl::span<VkLayerProperties> layers, gsl::czstring name)
-  {
-    return std::any_of(layers.begin(), layers.end(), std::bind_front(LayerMatchesNames, name));
-  };
-  //////////////////////////////////////////////////////////////////////////
-  bool Graphics::AreAllLayersSupported(gsl::span<gsl::czstring> layers)
-  {
-    std::vector<VkLayerProperties> supported_layers = GetSupportedValidationLayers();
-
-    return std::all_of(layers.begin(), layers.end(), std::bind_front(IsLayerSupported, supported_layers));
+    CreateInstance();
+    SetupDebugMessenger();
+    PickPhysicalDevice();
   }
 
 }  // namespace veng
