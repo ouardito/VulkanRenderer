@@ -1,0 +1,66 @@
+# Clang-Format configuration for modern C++ with readability and consistency
+
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++20
+
+# Indentation
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ContinuationIndentWidth: 4
+
+# Line Wrapping
+ColumnLimit: 120
+BreakBeforeBraces: Allman           # Open braces on new line (readability)
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: None
+
+# Brackets and formatting
+AlignAfterOpenBracket: AlwaysBreak
+AlignOperands: true
+AlignTrailingComments: true
+BreakConstructorInitializers: AfterColon
+ConstructorInitializerIndentWidth: 4
+PenaltyBreakBeforeFirstCallParameter: 50
+PenaltyReturnTypeOnItsOwnLine: 200
+
+# Includes
+SortIncludes: false
+IncludeBlocks: Preserve
+IncludeCategories:
+  - Regex:           '^<.*\.h>'
+    Priority:        1
+    SortPriority:    0
+    CaseSensitive:   false
+  - Regex:           '^"'
+    Priority:        2
+    SortPriority:    0
+    CaseSensitive:   false
+
+# Pointers and References
+PointerAlignment: Left
+DerivePointerAlignment: false
+SpaceBeforeParens: ControlStatements
+
+# Custom tweaks for neatness
+InsertBraces: true
+IndentCaseLabels: true
+IndentGotoLabels: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+SpacesInAngles: false
+SpacesInContainerLiterals: false
+SpaceAfterCStyleCast: true
+SpaceBeforeCpp11BracedList: false
+Cpp11BracedListStyle: true
+
+# Bonus
+ReflowComments: true
+SortUsingDeclarations: false
+FixNamespaceComments: true
+NamespaceIndentation: All
