@@ -34,6 +34,7 @@ namespace veng
     void PickPhysicalDevice();
     void CreateLogicalDeviceAndQueues();
     void CreateSurface();
+    void CreateSwapChain();
 
     // Instance Extensions
     static gsl::span<gsl::czstring> GetSuggestedInstanceExtension();
@@ -45,7 +46,7 @@ namespace veng
     static std::vector<VkLayerProperties> GetSupportedValidationLayers();
     static bool AreAllLayersSupported(gsl::span<gsl::czstring> layers);
 
-    // Physical Devices 
+    // Physical Devices
     std::vector<VkPhysicalDevice> GetAvailableDevices();
     bool isDeviceSuitable(VkPhysicalDevice device);
 
@@ -58,6 +59,10 @@ namespace veng
     QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
 
     // Physical Devices - SwapChain
+    VkSurfaceFormatKHR ChooseSwapSurfaceFormat(gsl::span<VkSurfaceFormatKHR> formats);
+    VkPresentModeKHR ChooseSwapPresentationMode(gsl::span<VkPresentModeKHR> presentation_modes);
+    VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+    std::uint32_t ChooseSwapImageCount(const VkSurfaceCapabilitiesKHR& capabilities);
     SwapChainProperties GetSwapChainProperties(VkPhysicalDevice device);
 
     VkInstance instance_ = VK_NULL_HANDLE;
@@ -69,6 +74,7 @@ namespace veng
     VkQueue presentation_queue_ = VK_NULL_HANDLE;
 
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+    VkSwapchainKHR swap_chain_ = VK_NULL_HANDLE;
 
     gsl::not_null<Window*> window_;
     bool validation_enabled_ = false;

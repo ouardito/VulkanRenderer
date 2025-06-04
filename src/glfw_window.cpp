@@ -24,6 +24,12 @@ namespace veng
     glfwGetWindowSize(window_, &window_size.x, &window_size.y);
     return window_size;
   }
+  glm::ivec2 Window::getFrameBufferSize() const
+  {
+    glm::ivec2 frame_buffer_size;
+    glfwGetFramebufferSize(window_, &frame_buffer_size.x, &frame_buffer_size.y);
+    return frame_buffer_size;
+  }
   bool Window::ShouldClose() const
   {
     return glfwWindowShouldClose(window_);

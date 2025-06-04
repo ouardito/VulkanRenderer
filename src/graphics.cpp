@@ -422,6 +422,131 @@ namespace veng
       std::exit(EXIT_FAILURE);
     }
   }
+
+  // Swap Chain Format Helpers
+  bool IsRGBATypeFormat(VkSurfaceFormatKHR& format_properties)
+  {
+    return format_properties.format == VK_FORMAT_R8G8B8A8_SRGB ||
+           // format_properties.format == VK_FORMAT_A8B8G8R8_SRGB_PACK32 ||
+           format_properties.format == VK_FORMAT_B8G8R8A8_SRGB;
+  };
+  bool IsSRGBColorSpace(VkSurfaceFormatKHR& format_properties)
+  {
+    return format_properties.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+  };
+  bool IsCorrectFormat(VkSurfaceFormatKHR& format_properties)
+  {
+    return IsRGBATypeFormat(format_properties) && IsSRGBColorSpace(format_properties);
+  }
+  VkSurfaceFormatKHR Graphics::ChooseSwapSurfaceFormat(gsl::span<VkSurfaceFormatKHR> formats)
+  {
+    if (formats.size() == 1 && formats[0].format == VK_FORMAT_UNDEFINED)
+    {
+      return {VK_FORMAT_R8G8B8A8_SRGB, VK_COLORSPACE_SRGB_NONLINEAR_KHR};
+    }
+
+    auto it = std::find_if(formats.begin(), formats.end(), IsCorrectFormat);
+
+    if (it != formats.end())
+    {
+      return *it;
+    }
+
+    return formats[0];
+  };
+
+  // Swap Chain Present Mode Helpers
+  bool IsMailBoxPresentMode(const VkPresentModeKHR& mode)
+  {
+    return mode == VK_PRESENT_MODE_MAILBOX_KHR;
+  }
+  VkPresentModeKHR Graphics::ChooseSwapPresentationMode(gsl::span<VkPresentModeKHR> presentation_modes)
+  {
+    if (std::any_of(presentation_modes.begin(), presentation_modes.end(), IsMailBoxPresentMode))
+    {
+      return VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR;
+    }
+    else
+    {
+      return VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
+    }
+  };
+
+  // Swap Chain Extent helper
+  VkExtent2D Graphics::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
+  {
+    constexpr std::uint32_t kInvalidSize = std::numeric_limits<std::uint32_t>::max();
+    if (capabilities.currentExtent.width != kInvalidSize)
+    {
+      return capabilities.currentExtent;
+    }
+
+    glm::ivec2 size = window_->getFrameBufferSize();
+    VkExtent2D actual_extent = {static_cast<std::uint32_t>(size.x), static_cast<std::uint32_t>(size.y)};
+    actual_extent.width =
+        std::clamp(actual_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+    actual_extent.height =
+        std::clamp(actual_extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+    return actual_extent;
+  };
+
+  // Swap Chain Image Count Helper
+  std::uint32_t Graphics::ChooseSwapImageCount(const VkSurfaceCapabilitiesKHR& capabilities)
+  {
+    std::uint32_t image_count = capabilities.minImageCount + 1;
+    if (capabilities.maxImageCount > 0 && capabilities.maxImageCount < image_count)
+    {
+      image_count = capabilities.maxImageCount;
+    }
+
+    return image_count;
+  }
+  void Graphics::CreateSwapChain()
+  {
+    SwapChainProperties properties = GetSwapChainProperties(physical_device_);
+
+    VkSurfaceFormatKHR surface_format = ChooseSwapSurfaceFormat(properties.formats_);
+    VkPresentModeKHR presentation_mode = ChooseSwapPresentationMode(properties.presentaion_modes_);
+    VkExtent2D extent = ChooseSwapExtent(properties.capabilities_);
+    std::uint32_t image_count = ChooseSwapImageCount(properties.capabilities_);
+
+    VkSwapchainCreateInfoKHR info = {};
+    info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    info.surface = surface_;
+    info.minImageCount = image_count;
+    info.imageFormat = surface_format.format;
+    info.imageColorSpace = surface_format.colorSpace;
+    info.imageExtent = extent;
+    info.imageArrayLayers = 1;
+    info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    info.presentMode = presentation_mode;
+    info.preTransform = properties.capabilities_.currentTransform;
+    info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    info.clipped = VK_TRUE;
+    info.oldSwapchain = VK_NULL_HANDLE;
+
+    QueueFamilyIndices indices = FindQueueFamilies(physical_device_);
+
+    if (indices.graphics_family_ != indices.presentation_family_)
+    {
+      std::array<std::uint32_t, 2> family_indices[] = {
+          indices.graphics_family_.value(), indices.presentation_family_.value()};
+      info.imageSharingMode = VkSharingMode::VK_SHARING_MODE_CONCURRENT;
+      info.queueFamilyIndexCount = family_indices->size();
+      info.pQueueFamilyIndices = family_indices->data();
+    }
+    else
+    {
+      info.imageSharingMode = VkSharingMode::VK_SHARING_MODE_EXCLUSIVE;
+    }
+
+    VkResult result = vkCreateSwapchainKHR(logical_device_, &info, VK_NULL_HANDLE, &swap_chain_);
+    if (result != VK_SUCCESS)
+    {
+      std::exit(EXIT_FAILURE);
+    }
+  }
 #pragma endregion
 
   Graphics::Graphics(gsl::not_null<Window*> window) : window_(window)
@@ -437,6 +562,10 @@ namespace veng
   {
     if (logical_device_ != VK_NULL_HANDLE)
     {
+      if (swap_chain_ != VK_NULL_HANDLE)
+      {
+        vkDestroySwapchainKHR(logical_device_, swap_chain_, VK_NULL_HANDLE);
+      }
       vkDestroyDevice(logical_device_, VK_NULL_HANDLE);
     }
 
@@ -461,6 +590,7 @@ namespace veng
     CreateSurface();
     PickPhysicalDevice();
     CreateLogicalDeviceAndQueues();
+    CreateSwapChain();
   }
 
 }  // namespace veng
