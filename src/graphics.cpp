@@ -338,6 +338,8 @@ namespace veng
     {
       std::exit(EXIT_FAILURE);
     }
+
+    vkGetDeviceQueue(logical_device_, queue_info.queueFamilyIndex, 0, &graphics_queue_);
   }
 
 #pragma endregion
