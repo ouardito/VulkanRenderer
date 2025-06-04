@@ -77,7 +77,7 @@ namespace veng
   // Validation layers
   std::vector<VkLayerProperties> Graphics::GetSupportedValidationLayers()
   {
-    std::uint32_t count;
+    std::uint32_t count = 0;
     vkEnumerateInstanceLayerProperties(&count, nullptr);
 
     if (count == 0)
@@ -162,7 +162,7 @@ namespace veng
 
   std::vector<VkExtensionProperties> Graphics::GetSupportedInstanceExtensions()
   {
-    std::uint32_t count;
+    std::uint32_t count = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
 
     if (count == 0)
@@ -248,15 +248,30 @@ namespace veng
 
 #pragma region DEVICES_AND_QUEUES
 
+  Graphics::QueueFamilyIndices Graphics::FindQueueFamilies(VkPhysicalDevice device)
+  {
+    std::uint32_t queue_family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+    std::vector<VkQueueFamilyProperties> families(queue_family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, families.data());
+
+    auto graphics_family_it = std::find_if(
+        families.begin(), families.end(),
+        [](const VkQueueFamilyProperties& props)
+        {
+          return props.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT);
+        });
+
+    QueueFamilyIndices QFI_result;
+    QFI_result.graphics_family_ = graphics_family_it - families.begin();
+    return QFI_result;
+  };
+
   bool Graphics::isDeviceSuitable(VkPhysicalDevice device)
   {
-    VkPhysicalDeviceProperties device_properties;
-    vkGetPhysicalDeviceProperties(device, &device_properties);
+    QueueFamilyIndices families = FindQueueFamilies(device);
 
-    VkPhysicalDeviceFeatures device_features;
-    vkGetPhysicalDeviceFeatures(device, &device_features);
-
-    return true;  // TODO: Add criterias
+    return families.IsValid();  // TODO: Add criterias
   }
 
   void Graphics::PickPhysicalDevice()
@@ -271,17 +286,12 @@ namespace veng
       std::exit(EXIT_FAILURE);
     }
 
-    for (VkPhysicalDevice device : devices)
-    {
-      VkPhysicalDeviceProperties device_properties;
-      vkGetPhysicalDeviceProperties(device, &device_properties);
-      SPDLOG_INFO("Devices found:{}", device_properties.deviceName);
-    }
+    physical_device_ = devices[0];
   }
 
   std::vector<VkPhysicalDevice> Graphics::GetAvailableDevices()
   {
-    std::uint32_t device_count;
+    std::uint32_t device_count = 0;
     vkEnumeratePhysicalDevices(instance_, &device_count, nullptr);
 
     if (device_count == 0)

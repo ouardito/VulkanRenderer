@@ -5,9 +5,10 @@
 #include <cmath>
 #include <string>
 #include <string_view>
-#include <functional>
 #include <vector>
 #include <array>
+#include <functional>
+#include <optional>
 
 // Vendor
 #include <GLFW/glfw3.h>
