@@ -47,6 +47,7 @@ namespace veng
     VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
     VkDevice logical_device_ = VK_NULL_HANDLE;
     VkQueue graphics_queue_ = VK_NULL_HANDLE;
+    VkQueue presentation_queue_ = VK_NULL_HANDLE;
 
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
 

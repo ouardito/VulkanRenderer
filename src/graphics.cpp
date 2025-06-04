@@ -264,6 +264,18 @@ namespace veng
 
     QueueFamilyIndices QFI_result;
     QFI_result.graphics_family_ = graphics_family_it - families.begin();
+
+    for (std::uint32_t i = 0; i < families.size(); i++)
+    {
+      VkBool32 has_representation_support = false;
+      vkGetPhysicalDeviceSurfaceSupportKHR(physical_device_, i, surface_, &has_representation_support);
+      if (has_representation_support)
+      {
+        QFI_result.presentation_family_ = i;
+        break;
+      }
+    }
+
     return QFI_result;
   };
 
@@ -314,20 +326,28 @@ namespace veng
     {
       std::exit(EXIT_FAILURE);
     }
-    VkDeviceQueueCreateInfo queue_info = {};
+
+    std::set<std::uint32_t> unique_queue_families = {
+        picked_device_families.graphics_family_.value(), picked_device_families.presentation_family_.value()};
 
     std::float_t queue_priority = 1.0f;
 
-    queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_info.queueFamilyIndex = picked_device_families.graphics_family_.value();
-    queue_info.queueCount = 1;
-    queue_info.pQueuePriorities = &queue_priority;
+    std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
+    for (std::uint32_t uqf : unique_queue_families)
+    {
+      VkDeviceQueueCreateInfo queue_info = {};
+      queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+      queue_info.queueFamilyIndex = uqf;
+      queue_info.queueCount = 1;
+      queue_info.pQueuePriorities = &queue_priority;
+      queue_create_infos.push_back(queue_info);
+    }
 
     VkPhysicalDeviceFeatures required_features = {};
     VkDeviceCreateInfo device_info = {};
     device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_info.queueCreateInfoCount = 1;
-    device_info.pQueueCreateInfos = &queue_info;
+    device_info.queueCreateInfoCount = queue_create_infos.size();
+    device_info.pQueueCreateInfos = queue_create_infos.data();
     device_info.pEnabledFeatures = &required_features;
     device_info.enabledExtensionCount = 0;
     device_info.enabledLayerCount = 0;  // DEPRECATED
@@ -339,7 +359,8 @@ namespace veng
       std::exit(EXIT_FAILURE);
     }
 
-    vkGetDeviceQueue(logical_device_, queue_info.queueFamilyIndex, 0, &graphics_queue_);
+    vkGetDeviceQueue(logical_device_, picked_device_families.graphics_family_.value(), 0, &graphics_queue_);
+    vkGetDeviceQueue(logical_device_, picked_device_families.presentation_family_.value(), 0, &presentation_queue_);
   }
 
 #pragma endregion
@@ -389,9 +410,9 @@ namespace veng
   {
     CreateInstance();
     SetupDebugMessenger();
+    CreateSurface();
     PickPhysicalDevice();
     CreateLogicalDeviceAndQueues();
-    CreateSurface();
   }
 
 }  // namespace veng

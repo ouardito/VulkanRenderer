@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 #include <array>
+#include <set>
 #include <functional>
 #include <optional>
 
