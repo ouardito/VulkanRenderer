@@ -46,6 +46,17 @@ FetchContent_Declare(
 	GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(spdlog)
+
+# Tracy Profiler
+FetchContent_Declare(
+  tracy
+  GIT_REPOSITORY "https://github.com/wolfpld/tracy.git"
+  GIT_TAG "v0.12.0"
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(tracy)
+
 #########################################################
 include(cmake/Shaders.cmake)
 
@@ -63,13 +74,14 @@ target_link_libraries(VulkanEngine PRIVATE glm)
 target_link_libraries(VulkanEngine PRIVATE glfw)
 target_link_libraries(VulkanEngine PRIVATE Microsoft.GSL::GSL)
 target_link_libraries(VulkanEngine PRIVATE spdlog)
+target_link_libraries(VulkanEngine PUBLIC TracyClient)
 
 target_include_directories(VulkanEngine PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_compile_features(VulkanEngine PRIVATE cxx_std_20)
-
+target_compile_definitions(VulkanEngine PRIVATE TRACY_ENABLE TRACY_IMPORTS TRACY_ON_DEMAND TRACY_DELAYED_INIT TRACY_GPU TRACY_GPU_VULKAN)
 target_precompile_headers(VulkanEngine PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/precomp.h")
 
 
